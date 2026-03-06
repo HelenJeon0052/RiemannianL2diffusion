@@ -1,0 +1,62 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{Riemannian Diffusion Trajectory Analysis and Triton-based Acceleration Design}
+\author{jeon.isavelle@gmail.com}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Riemannian Diffusion Process}
+A stochastic process on a Riemannian manifold $(\mathcal{M}, g)$ can be described by a Stochastic Differential Equation (SDE) that accounts for the curvature of the space. The forward or reverse diffusion process is defined as follows:
+
+\begin{equation}
+    dx_t = \left[ f(x, t) + \frac{1}{2} \nabla_g \log p_t(x) \right] dt + \sqrt{g^{-1}} dw_t
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $g$ is the \textbf{Metric Tensor} defining the manifold's geometry.
+    \item $g^{-1}$ represents the inverse metric, which scales the Wiener process $dw_t$ to the tangent space $T_x\mathcal{M}$.
+    \item $\nabla_g \log p_t(x)$ is the \textbf{Riemannian Score Function}, defined as $g^{ij} \partial_j \log p_t(x)$.
+    \item $f(x, t)$ is the drift term, which in a Riemannian context often includes the \textbf{Geodesic Drift} to ensure the mean path follows the manifold's geodesics.
+\end{itemize}
+
+\section{Geometric Components for Analysis}
+To accurately simulate and analyze the trajectory, the following geometric quantities must be computed at each step:
+
+\subsection{Metric Tensor and Connection}
+The local geometry is captured by $g_{ij}(x)$. For deep learning applications (e.g., in latent space), this is often the induced metric from a generator $h$:
+\begin{equation}
+    g_{ij}(x) = \left( \frac{\partial h}{\partial x_i} \right)^T \left( \frac{\partial h}{\partial x_j} \right)
+\end{equation}
+The Geodesic Drift involves the Christoffel symbols $\Gamma_{ij}^k$, which require the derivatives of the metric:
+\begin{equation}
+    \Gamma_{ij}^k = \frac{1}{2} g^{kl} (\partial_j g_{il} + \partial_i g_{jl} - \partial_l g_{ij})
+\end{equation}
+
+\section{Triton-based Acceleration Strategy}
+Standard deep learning frameworks suffer from high memory overhead when computing $g(x)$ per-sample in a batch. Triton allows for fused kernels that optimize the following:
+
+\begin{enumerate}
+    \item \textbf{On-the-fly Metric Computation:} Instead of storing large Jacobians, compute $g(x)$ within the GPU shared memory during the SDE solver step.
+    \item \textbf{Matrix Inversion ($g^{-1}$):} Implement a specialized Cholesky decomposition or iterative solver (e.g., Neumann series) inside the Triton kernel to avoid expensive global memory synchronization.
+    \item \textbf{Geodesic Update Fusion:} Fuse the computation of $x_{t} + \Delta x_t$ with the Geodesic Drift calculation and the \textit{Retraction} (mapping back to the manifold) to minimize I/O latency.
+\end{enumerate}
+
+\section{Numerical Implementation}
+The trajectory analysis uses the \textbf{Riemannian Euler-Maruyama} scheme. Given the current position $x_t \in \mathcal{M}$:
+\begin{enumerate}
+    \item Sample noise $\epsilon \sim \mathcal{N}(0, I)$.
+    \item Compute the drift $b(x, t) = f(x, t) + \frac{1}{2} \nabla_g \log p_t(x)$.
+    \item Update: $x_{t+1} = \text{Retr}_{x_t} \left( b(x, t)\Delta t + \sqrt{g^{-1} \Delta t} \epsilon \right)$.
+\end{enumerate}
+
+\end{document}
